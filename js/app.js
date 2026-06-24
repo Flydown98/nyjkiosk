@@ -2,7 +2,7 @@ const fallbackData = {
   settings: {
     facilityName: "",
     subtitle: "주요일정 안내",
-    noticeTitle: "📢 6월 주요일정",
+    noticeTitle: "📢 6월 주요 일정",
     footerTitle: "공지 안내",
     footerText: "복지관 이용문의는 1층(운영, 시설, 활동지원서비스), 2층(각 프로그램) 개별 사무실에 문의주시면 감사하겠습니다. | 오늘 하루도 행복하고 건강한 시간 보내세요.",
     youtubeId: "",
@@ -18,30 +18,27 @@ const fallbackData = {
     weatherLabel: "남양주"
   },
   banners: [
-    {
-      visible: true,
-      imageUrl: "./assets/default-banner.png",
-      alt: "남양주시장애인복지관 안내 배너"
-    }
+    { visible: true, order: 1, title: "기본 배너", imageUrl: "./assets/default-banner.png", alt: "남양주시장애인복지관 안내 배너" }
   ],
   notices: [
-    {
-      visible: true,
-      important: true,
-      title: "🏢 활동지원사업 평가(6-29 회의실)",
-      date: "06-29"
-    }
+    { visible: true, important: true, order: 1, title: "🏢 활동지원사업 평가(6-29 회의실)", date: "06-29" },
+    { visible: true, important: false, order: 2, title: "🤝 한국수자원공사 경기동북권지사 후원물품 전달식(6-23, 10:30~11:00)", date: "06-23" },
+    { visible: true, important: false, order: 3, title: "❤️ 남양주시장애인복지관 20주년 고객감동이벤트(1층 로비)", date: "06-19" },
+    { visible: true, important: false, order: 4, title: "🗓️ 활동지원사 양성교육(6-20 ~ 6.28 매주 금, 토, 일)", date: "06-18" },
+    { visible: true, important: false, order: 5, title: "🔔 식당정비 진행(6-19 식당미운영)", date: "06-17" },
+    { visible: true, important: false, order: 6, title: "🔔 사회복지실습생 모집(상시 모집)", date: "06-01" }
   ]
 };
 
 const config = window.KIOSK_CONFIG || {};
-const dataUrl = config.DATA_URL || "./data/onedrive-board-template.csv";
-const dataFormat = (config.DATA_FORMAT || "csv").toLowerCase();
+const dataUrl = config.DATA_URL || "./kiosk-board-template.xlsx";
+const dataFormat = (config.DATA_FORMAT || "xlsx").toLowerCase();
 
 let currentBannerIndex = 0;
 let bannerTimer = null;
 let refreshTimer = null;
 let latestData = fallbackData;
+let weatherTimer = null;
 
 window.addEventListener("DOMContentLoaded", () => {
   fitStage();
@@ -66,18 +63,22 @@ function fitStage() {
 
 async function loadAndRenderData() {
   try {
-    const rawText = await fetchTextWithFallbacks(dataUrl);
     let loadedData;
 
     if (dataFormat === "csv") {
-      loadedData = csvRowsToData(parseCsv(rawText));
+      const rawText = await fetchTextWithFallbacks(dataUrl);
+      loadedData = rowsToData(parseCsv(rawText));
+    } else if (dataFormat === "xlsx") {
+      const arrayBuffer = await fetchBufferWithFallbacks(dataUrl);
+      loadedData = rowsToData(readXlsxRows(arrayBuffer));
     } else {
+      const rawText = await fetchTextWithFallbacks(dataUrl);
       loadedData = JSON.parse(rawText);
     }
 
     latestData = mergeData(fallbackData, loadedData);
   } catch (error) {
-    console.warn("CSV/JSON을 불러오지 못해 기본 데이터로 표시합니다.", error);
+    console.warn("관리표를 불러오지 못해 기본 예시 데이터로 표시합니다.", error);
     latestData = fallbackData;
   }
 
@@ -97,7 +98,7 @@ async function fetchTextWithFallbacks(url) {
 
   for (const candidate of urls) {
     try {
-      const response = await fetch(`${candidate}${candidate.includes("?") ? "&" : "?"}_=${Date.now()}`, {
+      const response = await fetch(addCacheBuster(candidate), {
         cache: "no-store",
         redirect: "follow"
       });
@@ -105,7 +106,7 @@ async function fetchTextWithFallbacks(url) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const text = await response.text();
-      if (looksLikeHtml(text)) throw new Error("CSV가 아니라 OneDrive 미리보기 HTML이 내려왔습니다. 직접 다운로드 링크가 필요합니다.");
+      if (looksLikeHtmlText(text)) throw new Error("CSV가 아니라 OneDrive 미리보기 HTML이 내려왔습니다. 공유/다운로드 링크가 필요합니다.");
       return text;
     } catch (error) {
       lastError = error;
@@ -116,38 +117,106 @@ async function fetchTextWithFallbacks(url) {
   throw lastError || new Error("데이터 파일을 불러오지 못했습니다.");
 }
 
+async function fetchBufferWithFallbacks(url) {
+  const urls = makeFetchUrls(url);
+  let lastError;
+
+  for (const candidate of urls) {
+    try {
+      const response = await fetch(addCacheBuster(candidate), {
+        cache: "no-store",
+        redirect: "follow"
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const buffer = await response.arrayBuffer();
+      if (looksLikeHtmlBuffer(buffer)) throw new Error("xlsx가 아니라 OneDrive 미리보기 HTML이 내려왔습니다. 공유/다운로드 링크가 필요합니다.");
+      return buffer;
+    } catch (error) {
+      lastError = error;
+      console.warn(`xlsx 주소 시도 실패: ${candidate}`, error);
+    }
+  }
+
+  throw lastError || new Error("xlsx 파일을 불러오지 못했습니다.");
+}
+
+function addCacheBuster(url) {
+  const separator = String(url).includes("?") ? "&" : "?";
+  return `${url}${separator}_=${Date.now()}`;
+}
+
 function makeFetchUrls(url) {
   const original = String(url || "").trim();
   if (!original) return [];
 
   const candidates = [original];
-
-  try {
-    const parsed = new URL(original, window.location.href);
-    if (!parsed.searchParams.has("download")) {
-      parsed.searchParams.set("download", "1");
-      candidates.push(parsed.toString());
-    }
-  } catch (error) {
-    // 상대경로 등 URL 변환이 안 되는 경우 원본만 사용합니다.
-  }
+  const normalized = normalizeOneDriveDownloadUrl(original);
+  if (normalized && normalized !== original) candidates.push(normalized);
 
   return [...new Set(candidates)];
 }
 
-function looksLikeHtml(text) {
+function normalizeOneDriveDownloadUrl(url) {
+  try {
+    const parsed = new URL(url, window.location.href);
+    const host = parsed.hostname.toLowerCase();
+    const isOneDrive = host.includes("onedrive.live.com") || host.includes("1drv.ms") || host.includes("sharepoint.com");
+
+    if (isOneDrive) {
+      parsed.searchParams.delete("web");
+      parsed.searchParams.set("download", "1");
+      return parsed.toString();
+    }
+
+    return parsed.toString();
+  } catch (error) {
+    return url;
+  }
+}
+
+function normalizeImageUrl(url) {
+  const value = String(url || "").trim();
+  if (!value) return "";
+  if (value.startsWith("./") || value.startsWith("../") || value.startsWith("/") || value.startsWith("data:")) return value;
+  return normalizeOneDriveDownloadUrl(value);
+}
+
+function looksLikeHtmlText(text) {
   const sample = String(text || "").trim().slice(0, 200).toLowerCase();
   return sample.startsWith("<!doctype html") || sample.startsWith("<html") || sample.includes("<body");
 }
 
+function looksLikeHtmlBuffer(buffer) {
+  const sampleBytes = new Uint8Array(buffer.slice(0, 200));
+  const sample = new TextDecoder("utf-8").decode(sampleBytes).trim().toLowerCase();
+  return sample.startsWith("<!doctype html") || sample.startsWith("<html") || sample.includes("<body");
+}
+
+function readXlsxRows(arrayBuffer) {
+  if (!window.XLSX) {
+    throw new Error("xlsx 라이브러리가 불러와지지 않았습니다. 인터넷 연결 또는 CDN 차단 여부를 확인하세요.");
+  }
+
+  const workbook = window.XLSX.read(arrayBuffer, { type: "array" });
+  const firstSheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[firstSheetName];
+
+  if (!worksheet) return [];
+
+  return window.XLSX.utils.sheet_to_json(worksheet, {
+    defval: "",
+    raw: false
+  });
+}
+
 function mergeData(base, incoming) {
-  const merged = {
+  return {
     settings: { ...base.settings, ...(incoming.settings || {}) },
     banners: Array.isArray(incoming.banners) && incoming.banners.length ? incoming.banners : base.banners,
     notices: Array.isArray(incoming.notices) && incoming.notices.length ? incoming.notices : base.notices
   };
-
-  return merged;
 }
 
 function renderAll(data) {
@@ -180,7 +249,7 @@ function renderYoutube(settings) {
     videoArea.innerHTML = `
       <div class="video-placeholder">
         <div class="placeholder-title">유튜브 영상 준비 중</div>
-        <div class="placeholder-desc">CSV 파일의 youtubeId 또는 youtubeUrl 값을 입력해주세요.</div>
+        <div class="placeholder-desc">관리표의 youtubeId 또는 youtubeUrl 값을 입력해주세요.</div>
       </div>
     `;
     return;
@@ -227,11 +296,21 @@ function extractYoutubeId(url) {
 }
 
 function renderBanners(banners, settings) {
-  const visibleBanners = (banners || []).filter(isVisible);
+  const visibleBanners = (banners || [])
+    .filter(isVisible)
+    .filter((banner) => normalizeImageUrl(banner.imageUrl))
+    .sort(byOrder);
+
   const bannerImage = document.getElementById("banner-image");
   const bannerSeconds = Number(settings.bannerSeconds || 8);
 
   if (bannerTimer) clearInterval(bannerTimer);
+
+  bannerImage.onerror = () => {
+    if (!bannerImage.src.includes("default-banner.png")) {
+      bannerImage.src = "./assets/default-banner.png";
+    }
+  };
 
   if (!visibleBanners.length) {
     bannerImage.src = "./assets/default-banner.png";
@@ -246,7 +325,7 @@ function renderBanners(banners, settings) {
     bannerImage.style.opacity = "0";
 
     setTimeout(() => {
-      bannerImage.src = banner.imageUrl || "./assets/default-banner.png";
+      bannerImage.src = normalizeImageUrl(banner.imageUrl) || "./assets/default-banner.png";
       bannerImage.alt = banner.alt || banner.title || "배너 이미지";
       bannerImage.style.opacity = "1";
       currentBannerIndex = (currentBannerIndex + 1) % visibleBanners.length;
@@ -261,7 +340,11 @@ function renderBanners(banners, settings) {
 }
 
 function renderNotices(notices, settings) {
-  const visibleNotices = (notices || []).filter(isVisible);
+  const visibleNotices = (notices || [])
+    .filter(isVisible)
+    .filter((notice) => String(notice.title || "").trim() !== "")
+    .sort(byOrder);
+
   const list = document.getElementById("notice-rolling-list");
   list.innerHTML = "";
 
@@ -313,6 +396,12 @@ function isVisible(item) {
   return ["y", "yes", "true", "1", "노출", "예", "o", "on"].includes(String(value).trim().toLowerCase());
 }
 
+function byOrder(a, b) {
+  const aOrder = Number(a.order || 9999);
+  const bOrder = Number(b.order || 9999);
+  return aOrder - bOrder;
+}
+
 function updateDateTime() {
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -334,32 +423,39 @@ async function renderWeather(settings) {
   const temp = document.getElementById("temp");
   const status = document.getElementById("weather-status");
 
-  if (!isVisible({ visible: settings.weatherEnabled })) {
-    temp.textContent = "--°C";
-    status.textContent = "날씨";
-    return;
-  }
+  if (weatherTimer) clearInterval(weatherTimer);
 
-  const latitude = Number(settings.weatherLatitude || 37.6360);
-  const longitude = Number(settings.weatherLongitude || 127.2165);
-  const label = settings.weatherLabel || "남양주";
+  const updateWeather = async () => {
+    if (!isVisible({ visible: settings.weatherEnabled })) {
+      temp.textContent = "--°C";
+      status.textContent = "날씨";
+      return;
+    }
 
-  try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&current=temperature_2m,weather_code&timezone=Asia%2FSeoul`;
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) throw new Error("날씨 API 연결 실패");
+    const latitude = Number(settings.weatherLatitude || 37.6360);
+    const longitude = Number(settings.weatherLongitude || 127.2165);
+    const label = settings.weatherLabel || "남양주";
 
-    const data = await response.json();
-    const temperature = Math.round(data.current.temperature_2m);
-    const code = Number(data.current.weather_code);
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&current=temperature_2m,weather_code&timezone=Asia%2FSeoul`;
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error("날씨 API 연결 실패");
 
-    temp.textContent = `${temperature}°C`;
-    status.textContent = `${weatherCodeToKorean(code)} ${label}`;
-  } catch (error) {
-    console.warn(error);
-    temp.textContent = "--°C";
-    status.textContent = "통신확인";
-  }
+      const data = await response.json();
+      const temperature = Math.round(data.current.temperature_2m);
+      const code = Number(data.current.weather_code);
+
+      temp.textContent = `${temperature}°C`;
+      status.textContent = `${weatherCodeToKorean(code)} ${label}`;
+    } catch (error) {
+      console.warn(error);
+      temp.textContent = "--°C";
+      status.textContent = "통신확인";
+    }
+  };
+
+  updateWeather();
+  weatherTimer = setInterval(updateWeather, 30 * 60 * 1000);
 }
 
 function weatherCodeToKorean(code) {
@@ -396,7 +492,7 @@ function parseCsv(text) {
     } else if ((char === "\n" || char === "\r") && !inQuotes) {
       if (char === "\r" && next === "\n") i += 1;
       row.push(value);
-      if (row.some((cell) => cell.trim() !== "")) rows.push(row);
+      if (row.some((cell) => String(cell).trim() !== "")) rows.push(row);
       row = [];
       value = "";
     } else {
@@ -405,11 +501,11 @@ function parseCsv(text) {
   }
 
   row.push(value);
-  if (row.some((cell) => cell.trim() !== "")) rows.push(row);
+  if (row.some((cell) => String(cell).trim() !== "")) rows.push(row);
 
   if (!rows.length) return [];
 
-  const headers = rows[0].map((header) => header.replace(/^\uFEFF/, "").trim());
+  const headers = rows[0].map((header) => String(header).replace(/^\uFEFF/, "").trim());
   return rows.slice(1).map((cells) => {
     const obj = {};
     headers.forEach((header, index) => {
@@ -419,42 +515,56 @@ function parseCsv(text) {
   });
 }
 
-function csvRowsToData(rows) {
+function rowsToData(rows) {
   const data = {
     settings: {},
     banners: [],
     notices: []
   };
 
-  rows.forEach((row) => {
-    const type = String(row.type || row.구분 || "").trim().toLowerCase();
+  (rows || []).forEach((row) => {
+    const typeRaw = pick(row, ["type", "구분"]);
+    const type = String(typeRaw || "").trim().toLowerCase();
 
-    if (type === "setting" || type === "설정") {
-      const key = row.key || row.항목;
-      const value = row.value || row.내용;
+    if (!type || type === "예시" || type === "example") return;
+
+    if (type === "setting" || type === "settings" || type === "설정") {
+      const key = pick(row, ["key", "항목"]);
+      const value = pick(row, ["value", "내용"]);
       if (key) data.settings[key] = castValue(value);
     }
 
     if (type === "banner" || type === "배너") {
       data.banners.push({
-        visible: castValue(row.visible || row.노출),
-        title: row.title || row.제목,
-        imageUrl: row.imageUrl || row.이미지주소,
-        alt: row.alt || row.설명
+        visible: castValue(pick(row, ["visible", "노출"])),
+        order: castValue(pick(row, ["order", "순서"])),
+        title: pick(row, ["title", "제목"]),
+        imageUrl: pick(row, ["imageUrl", "imageURL", "이미지주소"]),
+        alt: pick(row, ["alt", "설명"])
       });
     }
 
     if (type === "notice" || type === "공지") {
       data.notices.push({
-        visible: castValue(row.visible || row.노출),
-        important: castValue(row.important || row.강조),
-        title: row.title || row.제목,
-        date: row.date || row.날짜
+        visible: castValue(pick(row, ["visible", "노출"])),
+        important: castValue(pick(row, ["important", "강조"])),
+        order: castValue(pick(row, ["order", "순서"])),
+        title: pick(row, ["title", "제목"]),
+        date: pick(row, ["date", "날짜"])
       });
     }
   });
 
   return data;
+}
+
+function pick(row, keys) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) {
+      return String(row[key] ?? "").trim();
+    }
+  }
+  return "";
 }
 
 function castValue(value) {
