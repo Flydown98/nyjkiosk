@@ -1,10 +1,10 @@
-﻿구분,순서,항목,내용,노출,강조,제목,날짜,이미지주소,유튜브ID,유튜브URL,설명
+﻿﻿구분,순서,항목,내용,노출,강조,제목,날짜,이미지주소,유튜브ID,유튜브URL,설명
 예시,,예시작성법,"이 행은 화면에 표시되지 않습니다. 구분은 설정/배너/공지 중 하나로 적고, 노출·강조는 Y 또는 N으로 적습니다. 배너는 순서 숫자대로 표시됩니다.",Y,N,예시 공지 제목,07-01,https://onedrive.live.com/이미지공유링크,,https://www.youtube.com/watch?v=영상ID,맨 윗줄은 작성 예시입니다. 실제 운영 데이터는 아래 행부터 수정하세요.
 설정,,subtitle,주요일정 안내,,,,,,,,상단 로고 옆 보조 문구
 설정,,noticeTitle,📢 6월 주요 일정,,,,,,,,주요 일정 박스 제목
 설정,,footerTitle,공지 안내,,,,,,,,하단 빨간 박스 제목
 설정,,footerText,"복지관 이용문의는 1층(운영, 시설, 활동지원서비스), 2층(각 프로그램) 개별 사무실에 문의주시면 감사하겠습니다. | 오늘 하루도 행복하고 건강한 시간 보내세요.",,,,,,,,하단 흐르는 공지 문구
-설정,,youtubeId,,,,,,,,,유튜브 주소가 https://www.youtube.com/watch?v=ABCDEFG1234 이면 ABCDEFG1234만 입력
+설정,,youtubeId,1EM5Ykytyn4,,,,,,1EM5Ykytyn4,,유튜브 주소가 https://www.youtube.com/watch?v=ABCDEFG1234 이면 ABCDEFG1234만 입력
 설정,,youtubeUrl,,,,,,,,,youtubeId 대신 전체 유튜브 주소를 넣어도 됩니다.
 설정,,bannerSeconds,8,,,,,,,,배너가 여러 개일 때 다음 배너로 넘어가는 초
 설정,,noticeScrollSeconds,22,,,,,,,,공지 5개 이상일 때 위로 흐르는 속도

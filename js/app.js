@@ -39,6 +39,7 @@ let bannerTimer = null;
 let refreshTimer = null;
 let latestData = fallbackData;
 let weatherTimer = null;
+let dataDebugInfo = { loaded: false, message: "아직 관리표를 읽기 전입니다.", settings: {} };
 
 window.addEventListener("DOMContentLoaded", () => {
   fitStage();
@@ -77,9 +78,12 @@ async function loadAndRenderData() {
     }
 
     latestData = mergeData(fallbackData, loadedData);
+    dataDebugInfo = { loaded: true, message: "관리표 읽기 성공", settings: loadedData.settings || {} };
+    console.log("관리표 읽기 성공", dataDebugInfo, latestData);
   } catch (error) {
     console.warn("관리표를 불러오지 못해 기본 예시 데이터로 표시합니다.", error);
     latestData = fallbackData;
+    dataDebugInfo = { loaded: false, message: `관리표 읽기 실패: ${error.message || error}`, settings: {} };
   }
 
   renderAll(latestData);
@@ -240,16 +244,50 @@ function renderTextSettings(settings) {
 
 function renderYoutube(settings) {
   const videoArea = document.getElementById("video-area");
-  const youtubeId = settings.youtubeId || extractYoutubeId(settings.youtubeUrl || "");
-  const playlistId = settings.youtubePlaylistId || youtubeId;
+
+  const rawYoutubeId = cleanYoutubeValue(
+    settings.youtubeId ||
+    settings.youtubeID ||
+    settings.youtubeld ||
+    settings.youtubeVideoId ||
+    settings["유튜브ID"] ||
+    settings["유튜브아이디"] ||
+    settings["유튜브영상ID"] ||
+    ""
+  );
+
+  const rawYoutubeUrl = cleanYoutubeValue(
+    settings.youtubeUrl ||
+    settings.youtubeURL ||
+    settings["유튜브URL"] ||
+    settings["유튜브주소"] ||
+    ""
+  );
+
+  // youtubeId 칸에 실수로 전체 URL을 넣어도 인식합니다.
+  const youtubeId = cleanYoutubeValue(extractYoutubeId(rawYoutubeId) || rawYoutubeId || extractYoutubeId(rawYoutubeUrl));
+  const playlistId = cleanYoutubeValue(settings.youtubePlaylistId || settings.youtubePlaylistID || youtubeId);
+
+  console.log("유튜브 설정 확인", {
+    rawYoutubeId,
+    rawYoutubeUrl,
+    youtubeId,
+    playlistId,
+    settings,
+    dataDebugInfo
+  });
 
   videoArea.innerHTML = "";
 
   if (!youtubeId) {
+    const debugText = dataDebugInfo.loaded
+      ? "관리표는 읽혔지만 youtubeId / 유튜브ID 값을 찾지 못했습니다. 설정 행에서 항목=유튜브ID, 내용=영상ID 형태로 입력해주세요."
+      : dataDebugInfo.message;
+
     videoArea.innerHTML = `
       <div class="video-placeholder">
         <div class="placeholder-title">유튜브 영상 준비 중</div>
-        <div class="placeholder-desc">관리표의 youtubeId 또는 youtubeUrl 값을 입력해주세요.</div>
+        <div class="placeholder-desc">${escapeHtml(debugText)}</div>
       </div>
     `;
     return;
@@ -259,6 +297,7 @@ function renderYoutube(settings) {
   iframe.title = "복지관 안내 유튜브 영상";
   iframe.allow = "autoplay; encrypted-media; fullscreen; picture-in-picture";
   iframe.allowFullscreen = true;
+  iframe.referrerPolicy = "strict-origin-when-cross-origin";
 
   const params = new URLSearchParams({
     autoplay: "1",
@@ -270,21 +309,41 @@ function renderYoutube(settings) {
     rel: "0",
     playsinline: "1",
     iv_load_policy: "3",
-    fs: "0"
+    fs: "0",
+    enablejsapi: "1",
+    origin: window.location.origin
   });
 
   iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(youtubeId)}?${params.toString()}`;
   videoArea.appendChild(iframe);
 }
 
-function extractYoutubeId(url) {
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function cleanYoutubeValue(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[​-‍﻿]/g, "")
+    .replace(/\s+/g, "");
+}
+
+function extractYoutubeId(value) {
+  const url = String(value || "").trim();
   if (!url) return "";
 
   const patterns = [
-    /youtu\.be\/([^?&#]+)/,
-    /youtube\.com\/watch\?v=([^?&#]+)/,
-    /youtube\.com\/embed\/([^?&#]+)/,
-    /youtube\.com\/shorts\/([^?&#]+)/
+    /youtu\.be\/([^?&#/]+)/,
+    /youtube\.com\/watch\?[^#]*v=([^?&#/]+)/,
+    /youtube\.com\/embed\/([^?&#/]+)/,
+    /youtube\.com\/shorts\/([^?&#/]+)/,
+    /youtube\.com\/live\/([^?&#/]+)/
   ];
 
   for (const pattern of patterns) {
@@ -524,13 +583,16 @@ function rowsToData(rows) {
 
   (rows || []).forEach((row) => {
     const typeRaw = pick(row, ["type", "구분"]);
-    const type = String(typeRaw || "").trim().toLowerCase();
+    const type = normalizeText(typeRaw);
 
     if (!type || type === "예시" || type === "example") return;
 
     if (type === "setting" || type === "settings" || type === "설정") {
-      const key = pick(row, ["key", "항목"]);
-      const value = pick(row, ["value", "내용"]);
+      const keyFromColumn = pick(row, ["key", "항목"]);
+      const inferredKey = inferSettingKey(row, keyFromColumn);
+      const key = normalizeSettingKey(inferredKey);
+      const value = getSettingRowValue(row, key);
+
       if (key) data.settings[key] = castValue(value);
     }
 
@@ -539,7 +601,7 @@ function rowsToData(rows) {
         visible: castValue(pick(row, ["visible", "노출"])),
         order: castValue(pick(row, ["order", "순서"])),
         title: pick(row, ["title", "제목"]),
-        imageUrl: pick(row, ["imageUrl", "imageURL", "이미지주소"]),
+        imageUrl: pick(row, ["imageUrl", "imageURL", "이미지주소", "이미지 주소", "image"]),
         alt: pick(row, ["alt", "설명"])
       });
     }
@@ -555,16 +617,151 @@ function rowsToData(rows) {
     }
   });
 
+  // 혹시 항목명이 틀렸더라도, 유튜브 전용 열이나 URL이 있으면 마지막으로 한 번 더 찾습니다.
+  const detectedYoutube = detectYoutubeFromRows(rows);
+  if (!data.settings.youtubeId && detectedYoutube.youtubeId) data.settings.youtubeId = detectedYoutube.youtubeId;
+  if (!data.settings.youtubeUrl && detectedYoutube.youtubeUrl) data.settings.youtubeUrl = detectedYoutube.youtubeUrl;
+
   return data;
 }
 
+function detectYoutubeFromRows(rows) {
+  const result = { youtubeId: "", youtubeUrl: "" };
+
+  for (const row of rows || []) {
+    const type = normalizeText(pick(row, ["type", "구분"]));
+    if (type === "예시" || type === "example") continue;
+
+    const candidateId = cleanYoutubeValue(
+      pick(row, ["유튜브ID", "유튜브 아이디", "유튜브영상ID", "youtubeId", "youtubeID", "youtubeld", "youtubeVideoId"])
+    );
+    const candidateUrl = cleanYoutubeValue(
+      pick(row, ["유튜브URL", "유튜브주소", "youtubeUrl", "youtubeURL"])
+    );
+
+    if (!result.youtubeId && candidateId) result.youtubeId = extractYoutubeId(candidateId) || candidateId;
+    if (!result.youtubeUrl && candidateUrl) result.youtubeUrl = candidateUrl;
+
+    if (result.youtubeId || result.youtubeUrl) break;
+  }
+
+  return result;
+}
+
 function pick(row, keys) {
+  if (!row) return "";
+  const rowKeys = Object.keys(row);
+
   for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(row, key)) {
       return String(row[key] ?? "").trim();
     }
   }
+
+  // OneDrive/Excel에서 헤더에 공백·줄바꿈이 붙어도 인식되도록 보조 검색합니다.
+  const normalizedTargets = keys.map(normalizeHeaderName);
+  for (const rowKey of rowKeys) {
+    if (normalizedTargets.includes(normalizeHeaderName(rowKey))) {
+      return String(row[rowKey] ?? "").trim();
+    }
+  }
+
   return "";
+}
+
+function normalizeHeaderName(value) {
+  return String(value || "")
+    .replace(/^﻿/, "")
+    .replace(/[\s_\-]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeSettingKey(key) {
+  const raw = String(key || "").trim();
+  const normalized = normalizeHeaderName(raw);
+
+  const map = {
+    facilityname: "facilityName",
+    기관명: "facilityName",
+    subtitle: "subtitle",
+    부제목: "subtitle",
+    noticetitle: "noticeTitle",
+    일정제목: "noticeTitle",
+    공지제목: "noticeTitle",
+    footertitle: "footerTitle",
+    하단제목: "footerTitle",
+    footertext: "footerText",
+    하단공지: "footerText",
+    하단내용: "footerText",
+    youtubeid: "youtubeId",
+    youtubeld: "youtubeId", // I와 l이 헷갈려 잘못 입력한 경우까지 허용
+    youtubevideoid: "youtubeId",
+    youtube영상id: "youtubeId",
+    유튜브: "youtubeId",
+    영상id: "youtubeId",
+    유튜브id: "youtubeId",
+    유튜브영상id: "youtubeId",
+    유튜브아이디: "youtubeId",
+    youtubeurl: "youtubeUrl",
+    유튜브url: "youtubeUrl",
+    유튜브주소: "youtubeUrl",
+    youtubeplaylistid: "youtubePlaylistId",
+    유튜브재생목록id: "youtubePlaylistId",
+    bannerseconds: "bannerSeconds",
+    배너초: "bannerSeconds",
+    noticescrollseconds: "noticeScrollSeconds",
+    일정스크롤초: "noticeScrollSeconds",
+    tickerseconds: "tickerSeconds",
+    하단스크롤초: "tickerSeconds",
+    refreshminutes: "refreshMinutes",
+    새로고침분: "refreshMinutes",
+    weatherenabled: "weatherEnabled",
+    날씨표시: "weatherEnabled",
+    weatherlatitude: "weatherLatitude",
+    위도: "weatherLatitude",
+    weatherlongitude: "weatherLongitude",
+    경도: "weatherLongitude",
+    weatherlabel: "weatherLabel",
+    날씨지역명: "weatherLabel"
+  };
+
+  return map[normalized] || raw;
+}
+
+function inferSettingKey(row, keyFromColumn) {
+  if (keyFromColumn) return keyFromColumn;
+  if (pick(row, ["유튜브ID", "유튜브 아이디", "유튜브영상ID", "youtubeId", "youtubeID", "youtubeld", "youtubeVideoId"])) return "youtubeId";
+  if (pick(row, ["유튜브URL", "유튜브주소", "youtubeUrl", "youtubeURL"])) return "youtubeUrl";
+  return "";
+}
+
+function getSettingRowValue(row, normalizedKey) {
+  let value = pick(row, ["value", "내용"]);
+
+  // 유튜브는 사용자가 '내용' 칸이 아니라 전용 칸에 적어도 읽도록 처리합니다.
+  if (!value && normalizedKey === "youtubeId") {
+    value = pick(row, ["youtubeId", "youtubeID", "youtubeld", "youtubeVideoId", "유튜브ID", "유튜브 아이디", "유튜브영상ID", "유튜브아이디"]);
+  }
+
+  if (!value && normalizedKey === "youtubeUrl") {
+    value = pick(row, ["youtubeUrl", "youtubeURL", "유튜브URL", "유튜브주소"]);
+  }
+
+  // 항목명이 유튜브인데 값이 다른 열에 들어간 경우도 보조로 인식합니다.
+  if (!value && normalizedKey === "youtubeId") {
+    const values = Object.values(row || {}).map((v) => cleanYoutubeValue(v));
+    const urlValue = values.find((v) => extractYoutubeId(v));
+    if (urlValue) return extractYoutubeId(urlValue);
+    const idValue = values.find((v) => /^[A-Za-z0-9_-]{11}$/.test(v));
+    if (idValue) return idValue;
+  }
+
+  return value;
 }
 
 function castValue(value) {
