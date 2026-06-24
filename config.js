@@ -11,5 +11,5 @@
 */
 window.KIOSK_CONFIG = {
   DATA_FORMAT: "xlsx",
-  DATA_URL: "https://namyangju-my.sharepoint.com/:x:/g/personal/jhc_nyjwel_org/IQC4H1QHQiMHR6Y_V-BTiuaZAcOTf_83gcM9i-k2rUE44LI?e=dIZLIM"
+  DATA_URL: "https://namyangju-my.sharepoint.com/personal/jhc_nyjwel_org/_layouts/15/download.aspx?share=IQC4H1QHQiMHR6Y_V-BTiuaZAcOTf_83gcM9i-k2rUE44LI"
 };
