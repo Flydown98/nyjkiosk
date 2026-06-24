@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>남양주시장애인복지관 타운보드</title>
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <div id="stage">
+    <header>
+      <div class="logo-area">
+        <img src="./assets/logo.png" alt="남양주시장애인복지관 20주년 로고" class="header-logo" />
+        <div class="logo-text">
+          <h1 id="facility-name"></h1>
+          <p id="subtitle">주요일정 안내</p>
+        </div>
+      </div>
+
+      <div class="info-area">
+        <div class="weather" id="weather-box">
+          <span class="temp" id="temp">--°C</span>
+          <span class="status" id="weather-status">날씨</span>
+        </div>
+        <div class="time-box">
+          <div class="date" id="date-box">0월 0일 (일)</div>
+          <div class="clock" id="clock">00:00</div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="top-banner" id="banner-area" aria-label="상단 배너">
+        <img id="banner-image" src="./assets/default-banner.png" alt="복지관 안내 배너" />
+      </section>
+
+      <section class="video-area" id="video-area" aria-label="유튜브 영상">
+        <div class="video-placeholder" id="video-placeholder">
+          <div class="placeholder-title">유튜브 영상 준비 중</div>
+          <div class="placeholder-desc">data/data.json 파일의 youtubeId 값을 입력해주세요.</div>
+        </div>
+      </section>
+
+      <section class="notice-list-box" aria-label="공지 목록">
+        <div class="box-title" id="notice-title">📢 주요일정</div>
+        <div class="notice-ticker-viewport">
+          <ul class="notice-list" id="notice-rolling-list"></ul>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-title" id="footer-title">공지 안내</div>
+      <div class="ticker-wrap">
+        <div class="ticker" id="footer-ticker"></div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

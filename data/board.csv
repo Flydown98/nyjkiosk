@@ -1,0 +1,12 @@
+﻿type,key,value,visible,important,title,date,imageUrl,alt
+setting,subtitle,주요일정 안내,,,,,,
+setting,noticeTitle,📢 6월 주요일정,,,,,,
+setting,footerTitle,공지 안내,,,,,,
+setting,footerText,"복지관 이용문의는 1층(운영, 시설, 활동지원서비스), 2층(각 프로그램) 개별 사무실에 문의주시면 감사하겠습니다. | 오늘 하루도 행복하고 건강한 시간 보내세요.",,,,,,
+setting,youtubeId,,,,,,,
+setting,bannerSeconds,8,,,,,,
+setting,noticeScrollSeconds,22,,,,,,
+banner,,,Y,,기본 배너,,./assets/default-banner.png,남양주시장애인복지관 안내 배너
+notice,,,Y,Y,🏢 활동지원사업 평가(6-29 회의실),06-22,,
+notice,,,Y,N,"🤝 한국수자원공사 동북권지사 후원물품 전달식(6-23, 10:30 ~ 11:00)",06-22,,
+notice,,,Y,N,❤️ 남양주시장애인복지관 20주년 고객감동이벤트(1층 로비),06-19,,
