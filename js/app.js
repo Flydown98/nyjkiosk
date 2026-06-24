@@ -62,11 +62,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function fitStage() {
   const stage = document.getElementById("stage");
-  const scale = Math.min(window.innerWidth / 1080, window.innerHeight / 1920);
-  const left = (window.innerWidth - 1080 * scale) / 2;
-  const top = (window.innerHeight - 1920 * scale) / 2;
+  const baseWidth = 1080;
+  const baseHeight = 1920;
+  const scale = Math.min(window.innerWidth / baseWidth, window.innerHeight / baseHeight);
+  const left = Math.max((window.innerWidth - baseWidth * scale) / 2, 0);
+  const top = Math.max((window.innerHeight - baseHeight * scale) / 2, 0);
 
-  stage.style.transform = `translate(${left}px, ${top}px) scale(${scale})`;
+  // #stage는 position: fixed; left:0; top:0 상태에서만 움직입니다.
+  // flex 중앙정렬과 transform을 같이 쓰면 화면이 한쪽으로 밀려 비율이 틀어질 수 있습니다.
+  stage.style.transform = `translate3d(${left}px, ${top}px, 0) scale(${scale})`;
 }
 
 async function loadAndRenderData() {
@@ -140,9 +144,24 @@ function renderYoutube(settings) {
 
   const iframe = document.createElement("iframe");
   iframe.title = "복지관 안내 유튜브 영상";
-  iframe.allow = "autoplay; encrypted-media; fullscreen";
+  iframe.allow = "autoplay; encrypted-media; fullscreen; picture-in-picture";
   iframe.allowFullscreen = true;
-  iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(youtubeId)}?autoplay=1&mute=1&loop=1&playlist=${encodeURIComponent(playlistId)}&controls=0&modestbranding=1&rel=0&playsinline=1`;
+
+  const params = new URLSearchParams({
+    autoplay: "1",
+    mute: "1",
+    loop: "1",
+    playlist: playlistId,
+    controls: "0",
+    modestbranding: "1",
+    rel: "0",
+    playsinline: "1",
+    iv_load_policy: "3",
+    fs: "0"
+  });
+
+  // 유튜브 단일 영상 반복은 loop=1만으로는 부족해서 playlist=영상ID가 꼭 같이 들어가야 합니다.
+  iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(youtubeId)}?${params.toString()}`;
 
   videoArea.appendChild(iframe);
 }
