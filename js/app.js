@@ -11,10 +11,11 @@ const fallbackData = {
     bannerSeconds: 8,
     noticeScrollSeconds: 22,
     tickerSeconds: 25,
-    refreshMinutes: 10,
-    weatherEnabled: false,
-    weatherApiKey: "",
-    weatherCity: "Namyangju"
+    refreshMinutes: 5,
+    weatherEnabled: true,
+    weatherLatitude: 37.6360,
+    weatherLongitude: 127.2165,
+    weatherLabel: "남양주"
   },
   banners: [
     {
@@ -28,26 +29,21 @@ const fallbackData = {
       visible: true,
       important: true,
       title: "🏢 활동지원사업 평가(6-29 회의실)",
-      date: "06-22"
-    },
-    {
-      visible: true,
-      important: false,
-      title: "🤝 한국수자원공사 동북권지사 후원물품 전달식(6-23, 10:30 ~ 11:00)",
-      date: "06-22"
+      date: "06-29"
     }
   ]
 };
 
 const config = window.KIOSK_CONFIG || {};
-const dataUrl = config.DATA_URL || "./data/data.json";
-const dataFormat = (config.DATA_FORMAT || "json").toLowerCase();
+const dataUrl = config.DATA_URL || "./data/onedrive-board-template.csv";
+const dataFormat = (config.DATA_FORMAT || "csv").toLowerCase();
 
 let currentBannerIndex = 0;
 let bannerTimer = null;
+let refreshTimer = null;
 let latestData = fallbackData;
 
-document.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", () => {
   fitStage();
   window.addEventListener("resize", fitStage);
 
@@ -55,9 +51,6 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(updateDateTime, 1000);
 
   loadAndRenderData();
-
-  const refreshMinutes = Number(fallbackData.settings.refreshMinutes || 10);
-  setInterval(loadAndRenderData, Math.max(refreshMinutes, 1) * 60 * 1000);
 });
 
 function fitStage() {
@@ -68,17 +61,12 @@ function fitStage() {
   const left = Math.max((window.innerWidth - baseWidth * scale) / 2, 0);
   const top = Math.max((window.innerHeight - baseHeight * scale) / 2, 0);
 
-  // #stage는 position: fixed; left:0; top:0 상태에서만 움직입니다.
-  // flex 중앙정렬과 transform을 같이 쓰면 화면이 한쪽으로 밀려 비율이 틀어질 수 있습니다.
   stage.style.transform = `translate3d(${left}px, ${top}px, 0) scale(${scale})`;
 }
 
 async function loadAndRenderData() {
   try {
-    const response = await fetch(`${dataUrl}?t=${Date.now()}`, { cache: "no-store" });
-    if (!response.ok) throw new Error("데이터 파일을 불러오지 못했습니다.");
-
-    const rawText = await response.text();
+    const rawText = await fetchTextWithFallbacks(dataUrl);
     let loadedData;
 
     if (dataFormat === "csv") {
@@ -89,11 +77,67 @@ async function loadAndRenderData() {
 
     latestData = mergeData(fallbackData, loadedData);
   } catch (error) {
-    console.warn("기본 데이터로 표시합니다.", error);
+    console.warn("CSV/JSON을 불러오지 못해 기본 데이터로 표시합니다.", error);
     latestData = fallbackData;
   }
 
   renderAll(latestData);
+  scheduleDataRefresh(latestData.settings.refreshMinutes || config.REFRESH_MINUTES || 5);
+}
+
+function scheduleDataRefresh(minutes) {
+  const safeMinutes = Math.max(Number(minutes || 5), 1);
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(loadAndRenderData, safeMinutes * 60 * 1000);
+}
+
+async function fetchTextWithFallbacks(url) {
+  const urls = makeFetchUrls(url);
+  let lastError;
+
+  for (const candidate of urls) {
+    try {
+      const response = await fetch(`${candidate}${candidate.includes("?") ? "&" : "?"}_=${Date.now()}`, {
+        cache: "no-store",
+        redirect: "follow"
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const text = await response.text();
+      if (looksLikeHtml(text)) throw new Error("CSV가 아니라 OneDrive 미리보기 HTML이 내려왔습니다. 직접 다운로드 링크가 필요합니다.");
+      return text;
+    } catch (error) {
+      lastError = error;
+      console.warn(`데이터 주소 시도 실패: ${candidate}`, error);
+    }
+  }
+
+  throw lastError || new Error("데이터 파일을 불러오지 못했습니다.");
+}
+
+function makeFetchUrls(url) {
+  const original = String(url || "").trim();
+  if (!original) return [];
+
+  const candidates = [original];
+
+  try {
+    const parsed = new URL(original, window.location.href);
+    if (!parsed.searchParams.has("download")) {
+      parsed.searchParams.set("download", "1");
+      candidates.push(parsed.toString());
+    }
+  } catch (error) {
+    // 상대경로 등 URL 변환이 안 되는 경우 원본만 사용합니다.
+  }
+
+  return [...new Set(candidates)];
+}
+
+function looksLikeHtml(text) {
+  const sample = String(text || "").trim().slice(0, 200).toLowerCase();
+  return sample.startsWith("<!doctype html") || sample.startsWith("<html") || sample.includes("<body");
 }
 
 function mergeData(base, incoming) {
@@ -136,7 +180,7 @@ function renderYoutube(settings) {
     videoArea.innerHTML = `
       <div class="video-placeholder">
         <div class="placeholder-title">유튜브 영상 준비 중</div>
-        <div class="placeholder-desc">data/data.json 파일의 youtubeId 값을 입력해주세요.</div>
+        <div class="placeholder-desc">CSV 파일의 youtubeId 또는 youtubeUrl 값을 입력해주세요.</div>
       </div>
     `;
     return;
@@ -160,9 +204,7 @@ function renderYoutube(settings) {
     fs: "0"
   });
 
-  // 유튜브 단일 영상 반복은 loop=1만으로는 부족해서 playlist=영상ID가 꼭 같이 들어가야 합니다.
   iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(youtubeId)}?${params.toString()}`;
-
   videoArea.appendChild(iframe);
 }
 
@@ -268,7 +310,7 @@ function isVisible(item) {
   if (typeof value === "boolean") return value;
   if (value === undefined || value === null || value === "") return true;
 
-  return ["y", "yes", "true", "1", "노출", "o", "on"].includes(String(value).trim().toLowerCase());
+  return ["y", "yes", "true", "1", "노출", "예", "o", "on"].includes(String(value).trim().toLowerCase());
 }
 
 function updateDateTime() {
@@ -292,37 +334,27 @@ async function renderWeather(settings) {
   const temp = document.getElementById("temp");
   const status = document.getElementById("weather-status");
 
-  if (!settings.weatherEnabled || !settings.weatherApiKey) {
+  if (!isVisible({ visible: settings.weatherEnabled })) {
     temp.textContent = "--°C";
     status.textContent = "날씨";
     return;
   }
 
-  const weatherMap = {
-    Clear: "☀️ 맑음",
-    Clouds: "☁️ 흐림",
-    Rain: "🌧️ 비",
-    Drizzle: "🌦️ 이슬비",
-    Thunderstorm: "⛈️ 뇌우",
-    Snow: "❄️ 눈",
-    Mist: "🌫️ 안개",
-    Smoke: "🌫️ 안개",
-    Haze: "🌫️ 안개",
-    Dust: "😷 황사",
-    Fog: "🌫️ 안개"
-  };
+  const latitude = Number(settings.weatherLatitude || 37.6360);
+  const longitude = Number(settings.weatherLongitude || 127.2165);
+  const label = settings.weatherLabel || "남양주";
 
   try {
-    const city = settings.weatherCity || "Namyangju";
-    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${encodeURIComponent(settings.weatherApiKey)}&units=metric`;
-    const response = await fetch(url);
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&current=temperature_2m,weather_code&timezone=Asia%2FSeoul`;
+    const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) throw new Error("날씨 API 연결 실패");
 
     const data = await response.json();
-    const temperature = Math.round(data.main.temp);
-    const mainStatus = data.weather[0].main;
+    const temperature = Math.round(data.current.temperature_2m);
+    const code = Number(data.current.weather_code);
+
     temp.textContent = `${temperature}°C`;
-    status.textContent = weatherMap[mainStatus] || "🌤️ 날씨";
+    status.textContent = `${weatherCodeToKorean(code)} ${label}`;
   } catch (error) {
     console.warn(error);
     temp.textContent = "--°C";
@@ -330,7 +362,19 @@ async function renderWeather(settings) {
   }
 }
 
-/* CSV 지원: type,key,value,visible,important,title,date,imageUrl,alt */
+function weatherCodeToKorean(code) {
+  if (code === 0) return "☀️ 맑음";
+  if ([1, 2].includes(code)) return "🌤️ 구름조금";
+  if (code === 3) return "☁️ 흐림";
+  if ([45, 48].includes(code)) return "🌫️ 안개";
+  if ([51, 53, 55, 56, 57].includes(code)) return "🌦️ 이슬비";
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "🌧️ 비";
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return "❄️ 눈";
+  if ([95, 96, 99].includes(code)) return "⛈️ 뇌우";
+  return "🌤️ 날씨";
+}
+
+/* CSV 지원: 한글 헤더/영문 헤더 모두 가능 */
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -365,7 +409,7 @@ function parseCsv(text) {
 
   if (!rows.length) return [];
 
-  const headers = rows[0].map((header) => header.trim());
+  const headers = rows[0].map((header) => header.replace(/^\uFEFF/, "").trim());
   return rows.slice(1).map((cells) => {
     const obj = {};
     headers.forEach((header, index) => {
@@ -418,8 +462,8 @@ function castValue(value) {
 
   const text = String(value).trim();
 
-  if (["true", "TRUE", "Y", "y", "예", "노출", "1", "O", "o"].includes(text)) return true;
-  if (["false", "FALSE", "N", "n", "아니오", "숨김", "0", "X", "x"].includes(text)) return false;
+  if (["true", "TRUE", "Y", "y", "예", "노출", "1", "O", "o", "on", "ON"].includes(text)) return true;
+  if (["false", "FALSE", "N", "n", "아니오", "숨김", "0", "X", "x", "off", "OFF"].includes(text)) return false;
 
   if (text !== "" && !Number.isNaN(Number(text))) return Number(text);
 

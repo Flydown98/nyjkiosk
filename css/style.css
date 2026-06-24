@@ -17,11 +17,7 @@ body {
   position: relative;
 }
 
-/*
-  실제 키오스크 화면 기준 캔버스입니다.
-  원본 main.html과 동일하게 1080 x 1920 세로 비율을 기준으로 잡고,
-  브라우저 창 크기에 맞춰 같은 비율로만 확대/축소합니다.
-*/
+/* 1080 × 1920 세로 키오스크 고정 캔버스 */
 #stage {
   width: 1080px;
   height: 1920px;
@@ -86,20 +82,23 @@ header {
 
 .weather {
   text-align: right;
-  min-width: 155px;
+  min-width: 195px;
 }
 
 .weather .temp {
+  display: block;
   font-size: 48px;
   font-weight: 900;
   color: #f1c40f;
+  line-height: 1;
 }
 
 .weather .status {
-  display: inline-block;
+  display: block;
   font-size: 22px;
-  margin-left: 5px;
+  margin-top: 8px;
   color: #ecf0f1;
+  white-space: nowrap;
 }
 
 .time-box {
@@ -129,7 +128,7 @@ main {
   flex: 0 0 1640px;
 }
 
-/* 원본 비율 정리: 상단 45%, 영상 35%, 공지 20% */
+/* 기존 main.html 기준: 상단 배너 45%, 영상 35%, 공지 20% */
 .top-banner {
   height: 45%;
   display: flex;

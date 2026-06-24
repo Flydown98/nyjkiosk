@@ -1,16 +1,15 @@
 /*
-  기본은 data/data.json을 읽습니다.
+  ✅ 운영할 때 여기 DATA_URL만 바꾸면 됩니다.
 
-  OneDrive/SharePoint에 CSV 파일을 올려 직접 연결하려면 아래처럼 바꿔주세요.
-  단, 회사/기관 보안 설정에 따라 브라우저에서 차단될 수 있습니다.
+  1) data/onedrive-board-template.csv 파일을 OneDrive에 업로드합니다.
+  2) OneDrive에서 CSV 파일을 공유합니다. 가능하면 "링크가 있는 모든 사용자 보기 가능"으로 설정합니다.
+  3) 공유 링크를 복사해서 아래 DATA_URL에 붙여 넣습니다.
+  4) CSV 파일을 수정하면 키오스크 화면이 refreshMinutes 간격으로 다시 읽어옵니다.
 
-  window.KIOSK_CONFIG = {
-    DATA_FORMAT: "csv",
-    DATA_URL: "OneDrive 또는 SharePoint CSV 직접 다운로드 링크"
-  };
+  먼저 GitHub 화면이 정상 작동하는지 확인하려면 아래 기본값을 그대로 두세요.
+  기본값은 GitHub 저장소 안의 샘플 CSV를 읽습니다.
 */
-
 window.KIOSK_CONFIG = {
-  DATA_FORMAT: "json",
-  DATA_URL: "./data/data.json"
+  DATA_FORMAT: "csv",
+  DATA_URL: "./data/onedrive-board-template.csv"
 };
