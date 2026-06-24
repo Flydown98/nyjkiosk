@@ -11,5 +11,5 @@
 */
 window.KIOSK_CONFIG = {
   DATA_FORMAT: "csv",
-  DATA_URL: "./data/onedrive-board-template.csv"
+  DATA_URL: "https://namyangju-my.sharepoint.com/:x:/g/personal/jhc_nyjwel_org/IQBbhjziJFqlRY7SIc21V3lRAZcn45aF_y984vVLDa5C3hU?e=fdAtW1"
 };
